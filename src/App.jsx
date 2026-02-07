@@ -145,7 +145,6 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [rememberLogin, setRememberLogin] = useState(true);
   const [loginStatus, setLoginStatus] = useState("");
-  const [familyAdminKidId, setFamilyAdminKidId] = useState("");
   const [babyName, setBabyName] = useState("");
   const [babyBirthDate, setBabyBirthDate] = useState("");
   const [eventInput, setEventInput] = useState("");
@@ -164,6 +163,8 @@ export default function App() {
     perChild: [],
     topEventType: "None",
     topEventCount: 0,
+    mostActiveChild: "None",
+    mostActiveCount: 0,
     inactiveChildren: []
   });
   const [familyMetricsLoading, setFamilyMetricsLoading] = useState(false);
@@ -188,7 +189,6 @@ export default function App() {
       setSelectedBabyId(stored[0].id);
       setSelectedTheme(stored[0].theme || "blue");
       setOnboardingStep(auth?.isLoggedIn ? ONBOARDING_STEPS.CREATE_BABY : ONBOARDING_STEPS.ADD_EVENTS);
-      setFamilyAdminKidId(stored[0].id);
     }
   }, []);
 
@@ -377,6 +377,8 @@ export default function App() {
         perChild: [],
         topEventType: "None",
         topEventCount: 0,
+        mostActiveChild: "None",
+        mostActiveCount: 0,
         inactiveChildren: []
       });
       setFamilyMetricsStatus("");
@@ -414,12 +416,15 @@ export default function App() {
 
       const topEntry = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0];
       const inactiveChildren = perChild.filter((child) => child.count === 0).map((child) => child.name);
+      const mostActive = [...perChild].sort((a, b) => b.count - a.count)[0];
 
       setFamilyMetrics({
         totalEvents,
         perChild,
         topEventType: topEntry?.[0] || "None",
         topEventCount: topEntry?.[1] || 0,
+        mostActiveChild: mostActive?.name || "None",
+        mostActiveCount: mostActive?.count || 0,
         inactiveChildren
       });
       setFamilyMetricsStatus("Metrics synced.");
@@ -494,7 +499,6 @@ export default function App() {
   function handleOpenFamilyAdmin() {
     setOnboardingStep(ONBOARDING_STEPS.CREATE_BABY);
     setShowFamilyAdmin(true);
-    setFamilyAdminKidId(selectedBabyId || profiles[0]?.id || "");
     setApiStatus("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -515,7 +519,6 @@ export default function App() {
     setIsLoggedIn(true);
     setOnboardingStep(ONBOARDING_STEPS.CREATE_BABY);
     setShowFamilyAdmin(true);
-    setFamilyAdminKidId(selectedBabyId || profiles[0]?.id || "");
     setLoginStatus("");
     if (rememberLogin) {
       saveAuthSession({ isLoggedIn: true, email: loginEmail.trim() });
@@ -594,18 +597,59 @@ export default function App() {
     };
   }, [entries]);
 
+  const routineRows = useMemo(() => {
+    function findLatest(predicate) {
+      for (let index = entries.length - 1; index >= 0; index -= 1) {
+        const entry = entries[index];
+        if (predicate(`${entry.notes || ""}`.toLowerCase())) {
+          return entry;
+        }
+      }
+      return null;
+    }
+
+    const feeding = findLatest((text) => text.includes("feed"));
+    const sleep = findLatest((text) => text.includes("nap") || text.includes("sleep"));
+    const diaper = findLatest((text) =>
+      text.includes("diaper") || text.includes("poop") || text.includes("pee") || text.includes("wet")
+    );
+
+    return [
+      {
+        key: "feeding",
+        icon: "🍼",
+        title: "Feeding Time",
+        subtitle: feeding ? `${feeding.notes}` : "No feeding events logged yet."
+      },
+      {
+        key: "sleep",
+        icon: "🌙",
+        title: "Nap Window",
+        subtitle: sleep ? `${sleep.notes}` : "No sleep events logged yet."
+      },
+      {
+        key: "diaper",
+        icon: "💩",
+        title: "Diaper Change",
+        subtitle: diaper ? `${diaper.notes}` : "No diaper events logged yet."
+      }
+    ];
+  }, [entries]);
+
   if (!isLoggedIn) {
     return (
-      <div className={`app theme-${selectedTheme}`}>
+      <div className="app theme-haven">
         <div className="paper modern login-shell">
           <section className="login-card">
             <div className="brand">
-              <div className="brand-icon" aria-hidden="true">
-                <BabyFeet />
+              <div className="brand-row">
+                <div className="brand-icon" aria-hidden="true">
+                  <BabyFeet />
+                </div>
+                <p className="brand-name">Haven</p>
               </div>
-              <p className="eyebrow">Baby Log</p>
-              <h2>Welcome back</h2>
-              <p className="login-subtitle">Sign in to manage your family and daily logistics.</p>
+              <h2>Welcome to Haven</h2>
+              <p className="login-subtitle">Calm logistics for more confident parenting.</p>
             </div>
             <form className="note-form" onSubmit={handleLogin}>
               <label>
@@ -646,18 +690,22 @@ export default function App() {
   }
 
   return (
-    <div className={`app theme-${selectedTheme}`}>
+    <div className="app theme-haven">
       <div className="paper modern">
         <header className="topbar modern">
           <div className="brand">
-            <button
-              className="brand-icon brand-home-btn"
-              type="button"
-              aria-label="Open Family Admin"
-              onClick={handleOpenFamilyAdmin}
-            >
-              <BabyFeet />
-            </button>
+            <div className="brand-row">
+              <button
+                className="brand-icon brand-home-btn"
+                type="button"
+                aria-label="Open Family Admin"
+                onClick={handleOpenFamilyAdmin}
+              >
+                <BabyFeet />
+              </button>
+              <span className="brand-name">Haven</span>
+            </div>
+            <p className="brand-tagline">Peace of mind for parenthood</p>
           </div>
           <div className="topbar-tools">
             {hasProfiles && !showFamilyAdmin ? (
@@ -682,9 +730,10 @@ export default function App() {
           </div>
         </header>
 
-        <div className={`layout ${isCreateBabyStep ? "single-panel" : ""}`}>
-          {!isCreateBabyStep ? (
-            <aside className="sidepanel">
+        <div className={`experience theme-${selectedTheme}`}>
+          <div className={`layout ${isCreateBabyStep ? "single-panel" : ""}`}>
+            {!isCreateBabyStep ? (
+              <aside className="sidepanel">
               <div className="side-card highlight">
                 <p className="summary-title">Selected Baby</p>
                 <p className="summary-value summary-value-baby">{selectedBabyName}</p>
@@ -739,12 +788,12 @@ export default function App() {
                 <p className="summary-title">Daily encouragement</p>
                 <p className="motivation-quote">{dailyQuote}</p>
               </div>
-            </aside>
-          ) : null}
+              </aside>
+            ) : null}
 
-          <main className="mainpanel">
-            {isCreateBabyStep ? (
-              <section className="quick-log modern onboarding onboarding-screen">
+            <main className="mainpanel">
+              {isCreateBabyStep ? (
+                <section className="quick-log modern onboarding onboarding-screen">
                 {showFamilyAdmin ? (
                   <>
                     <div className="section-head">
@@ -771,34 +820,9 @@ export default function App() {
                         </span>
                       </div>
                     </div>
-                    {profiles.length ? (
-                      <div className="kid-admin-panel">
-                        <label>
-                          Kid profile
-                          <select
-                            value={familyAdminKidId}
-                            onChange={(event) => setFamilyAdminKidId(event.target.value)}
-                          >
-                            <option value="">Choose kid</option>
-                            {profiles.map((profile) => (
-                              <option key={profile.id} value={profile.id}>
-                                {profile.name} ({profile.id.slice(0, 6)})
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <button
-                          className="primary"
-                          type="button"
-                          disabled={!familyAdminKidId}
-                          onClick={() => handleChooseExistingKid(familyAdminKidId)}
-                        >
-                          Open kid logistics
-                        </button>
-                      </div>
-                    ) : (
+                    {!profiles.length ? (
                       <p className="status-note">No existing kids yet. Create your first baby profile.</p>
-                    )}
+                    ) : null}
                     <section className="family-metrics-card">
                       <div className="section-head">
                         <h3>Overall Family Metrics</h3>
@@ -816,23 +840,37 @@ export default function App() {
                           <p className="summary-value">{familyMetrics.topEventType}</p>
                           <p className="summary-note">{familyMetrics.topEventCount} logged</p>
                         </article>
+                        <article className="family-metric">
+                          <p className="summary-title">Most Active Child</p>
+                          <p className="summary-value">{familyMetrics.mostActiveChild}</p>
+                          <p className="summary-note">{familyMetrics.mostActiveCount} events</p>
+                        </article>
+                        <article className="family-metric">
+                          <p className="summary-title">Needs Attention</p>
+                          <p className="summary-value">{familyMetrics.inactiveChildren.length}</p>
+                          <p className="summary-note">Children with no logged events</p>
+                        </article>
                       </div>
-                      <div className="family-bars">
-                        <p className="summary-title">Events by Child</p>
+                      <div className="family-activity-list">
+                        <p className="summary-title">Child Activity</p>
                         {familyMetrics.perChild.length ? (
                           familyMetrics.perChild.map((child) => {
-                            const maxCount = Math.max(...familyMetrics.perChild.map((item) => item.count), 1);
+                            const needsAttention = child.count === 0;
                             return (
-                              <div key={child.id} className="family-bar-row">
-                                <span>{child.name}</span>
-                                <div className="family-bar-track">
-                                  <div
-                                    className="family-bar-fill"
-                                    style={{ width: `${(child.count / maxCount) * 100}%` }}
-                                  />
+                              <button
+                                key={child.id}
+                                className="family-activity-row"
+                                type="button"
+                                onClick={() => handleChooseExistingKid(child.id)}
+                              >
+                                <div className="family-activity-main">
+                                  <strong>{child.name}</strong>
+                                  <span>{child.count} events</span>
                                 </div>
-                                <strong>{child.count}</strong>
-                              </div>
+                                <span className={`family-activity-status ${needsAttention ? "warn" : "ok"}`}>
+                                  {needsAttention ? "Needs attention" : "Updated"}
+                                </span>
+                              </button>
                             );
                           })
                         ) : (
@@ -906,11 +944,11 @@ export default function App() {
                     </form>
                   </>
                 )}
-              </section>
-            ) : null}
+                </section>
+              ) : null}
 
-            {onboardingStep === ONBOARDING_STEPS.ADD_EVENTS ? (
-              <section className="analytics modern">
+              {onboardingStep === ONBOARDING_STEPS.ADD_EVENTS ? (
+                <section className="analytics modern">
                 <div className="section-head">
                   <h2>Analytics Snapshot</h2>
                   <p>Live patterns from today&apos;s events.</p>
@@ -957,11 +995,11 @@ export default function App() {
                     </div>
                   </article>
                 </div>
-              </section>
-            ) : null}
+                </section>
+              ) : null}
 
-            {!isCreateBabyStep ? (
-              <section className="quick-log modern onboarding-screen">
+              {!isCreateBabyStep ? (
+                <section className="quick-log modern onboarding-screen">
               <div className="section-head">
                 <h2>Add Baby Events</h2>
                 <div className="date-chip section-date-chip">
@@ -978,6 +1016,30 @@ export default function App() {
                   <span>2</span>
                   Add events
                 </div>
+              </div>
+              <article className="glance-hero">
+                <h3>{selectedBabyName}&apos;s Day at a Glance</h3>
+                <p>
+                  {entries.length
+                    ? `Tracking ${entries.length} moments today. Keep logging to build clearer family patterns.`
+                    : "A calm start. Add your first event to begin building today’s pattern."}
+                </p>
+              </article>
+              <div className="routine-rows">
+                {routineRows.map((row) => (
+                  <button key={row.key} className="routine-row" type="button">
+                    <span className="routine-icon" aria-hidden="true">
+                      {row.icon}
+                    </span>
+                    <span className="routine-content">
+                      <strong>{row.title}</strong>
+                      <span>{row.subtitle}</span>
+                    </span>
+                    <span className="routine-chevron" aria-hidden="true">
+                      ›
+                    </span>
+                  </button>
+                ))}
               </div>
               <form className="note-form" onSubmit={handleAddEvent}>
                 <div className="event-composer">
@@ -1063,11 +1125,11 @@ export default function App() {
                 </button>
                 {apiStatus ? <p className="status-note">{apiStatus}</p> : null}
               </form>
-            </section>
-            ) : null}
+                </section>
+              ) : null}
 
-            {onboardingStep === ONBOARDING_STEPS.ADD_EVENTS ? (
-              <section className="timeline modern">
+              {onboardingStep === ONBOARDING_STEPS.ADD_EVENTS ? (
+                <section className="timeline modern">
               <div className="section-head">
                 <h2>Today&apos;s Timeline</h2>
                 <div className="timeline-head-tools">
@@ -1114,29 +1176,30 @@ export default function App() {
                   })}
                 </div>
               ) : null}
-            </section>
-            ) : null}
-          </main>
-        </div>
+                </section>
+              ) : null}
+            </main>
+          </div>
 
-        <button
-          className="fab"
-          aria-label="Add new baby"
-          type="button"
-          onClick={handleStartAddBaby}
-        >
-          <Plus />
-        </button>
-        {isCreateBabyStep && !showFamilyAdmin ? (
           <button
-            className="cancel-fab"
-            aria-label="Cancel create baby and open family administer"
+            className="fab"
+            aria-label="Add new baby"
             type="button"
-            onClick={handleOpenFamilyAdmin}
+            onClick={handleStartAddBaby}
           >
-            X
+            <Plus />
           </button>
-        ) : null}
+          {isCreateBabyStep && !showFamilyAdmin ? (
+            <button
+              className="cancel-fab"
+              aria-label="Cancel create baby and open family administer"
+              type="button"
+              onClick={handleOpenFamilyAdmin}
+            >
+              X
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );

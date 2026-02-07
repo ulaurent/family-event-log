@@ -1,4 +1,4 @@
-# Baby Log Front End
+# Family Log Front End
 
 A cozy, journal-inspired React web app for logging baby events.
 
